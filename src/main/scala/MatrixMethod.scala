@@ -3,6 +3,12 @@ import org.apache.spark.rdd.RDD
 
 object MatrixMethod {
 
+  def fileToMatrix(file: RDD[String]): RDD[(Int, (Int, Double))] = {
+    file.map { line =>
+      val edge = line.split("\t")
+      (edge(0).toInt, (edge(1).toInt, 1.0))
+    }
+  }
   def getDanglers(adjacencyMatrix: RDD[(Int, (Int, Double))], numNodes: Int, sc: SparkContext): RDD[(Int, Int)] = {
     val possibleNodes = sc.parallelize(0 until numNodes)
     val notDanglers = adjacencyMatrix.map {
@@ -38,11 +44,15 @@ object MatrixMethod {
   def powerIterations(adjacencyMatrix: RDD[(Int, (Int, Double))], numNodes: Int, sc: SparkContext,
                      numIterations: Int, alpha: Double): DistrVector = {
     val danglers = getDanglers(adjacencyMatrix, numNodes, sc)
-    val hyperlinks = toHyperLinkMat(adjacencyMatrix)
+    val hyperlinks = toHyperLinkMat(adjacencyMatrix).persist()
     var pivector = new DistrVector(sc.parallelize(0 until numNodes).map(x => (x, 1.0 / numNodes)))
     for (i <- 1 to numIterations) {
-      pivector = iterate(pivector, hyperlinks, danglers, alpha, numNodes, sc)
+      pivector.getValues.persist()
+      val nextPivector = iterate(pivector, hyperlinks, danglers, alpha, numNodes, sc)
+      pivector.getValues.unpersist()
+      pivector = nextPivector
     }
+    hyperlinks.unpersist()
     pivector
   }
 }

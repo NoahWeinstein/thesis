@@ -8,7 +8,7 @@ object BasicPageRank {
     val isAws = false
     val conf = new SparkConf().setAppName("BasicPageRank").setMaster("local[2]")
     val sc = new SparkContext(conf)
-    sc.setLogLevel("WARN")
+    //sc.setLogLevel("WARN")
     if (isAws) {
 
       val fileName = "s3://thesisgraphs/small-graph.txt"
@@ -20,8 +20,14 @@ object BasicPageRank {
 
       ranks.coalesce(1).saveAsTextFile("s3://thesisgraphs/output")
     } else {
-      vectorTest(sc)
-      matrixMethodTest(sc)
+      val fileName = "web-Google.txt"
+      val file = sc.textFile(fileName)
+      val adjacencyMatrix = MatrixMethod.fileToMatrix(file).persist()
+      val numNodes = adjacencyMatrix.count().toInt
+      MatrixMethod.powerIterations(adjacencyMatrix, numNodes, sc, 1, 0.85).printAll()
+      adjacencyMatrix.unpersist()
+      //vectorTest(sc)
+      //matrixMethodTest(sc)
     }
 
   }
