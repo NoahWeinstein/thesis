@@ -20,14 +20,16 @@ object BasicPageRank {
 
       ranks.coalesce(1).saveAsTextFile("s3://thesisgraphs/output")
     } else {
+      /*
       val fileName = "web-Google.txt"
       val file = sc.textFile(fileName)
       val adjacencyMatrix = MatrixMethod.fileToMatrix(file).persist()
       val numNodes = adjacencyMatrix.count().toInt
       MatrixMethod.powerIterations(adjacencyMatrix, numNodes, sc, 1, 0.85).printAll()
       adjacencyMatrix.unpersist()
+      */
       //vectorTest(sc)
-      //matrixMethodTest(sc)
+      matrixMethodTest(sc)
     }
 
   }

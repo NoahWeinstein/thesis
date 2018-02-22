@@ -16,9 +16,7 @@ class DistrVector(values: RDD[(Int, Double)]) {
     val withScalars = values.join(mat)
     // We just care about the column and vector value * matrix value
     val newValues = withScalars map {
-      case (row, (vecValue , (col, matValue))) => (col, (row, vecValue * matValue))
-    } map {
-      case (col, (_, value)) => (col, value)
+      case (row, (vecValue , (col, matValue))) => (col, vecValue * matValue)
     } reduceByKey {
       case (x, y) => x + y
     }
