@@ -8,7 +8,7 @@ object BasicPageRank {
     val isAws = false
     val conf = new SparkConf().setAppName("BasicPageRank").setMaster("local[2]")
     val sc = new SparkContext(conf)
-    //sc.setLogLevel("WARN")
+    sc.setLogLevel("WARN")
     if (isAws) {
 
       val fileName = "s3://thesisgraphs/small-graph.txt"
@@ -20,16 +20,34 @@ object BasicPageRank {
 
       ranks.coalesce(1).saveAsTextFile("s3://thesisgraphs/output")
     } else {
-      /*
+
       val fileName = "web-Google.txt"
       val file = sc.textFile(fileName)
+
+      //Matrix Method First
       val adjacencyMatrix = MatrixMethod.fileToMatrix(file).persist()
-      val numNodes = adjacencyMatrix.count().toInt
-      MatrixMethod.powerIterations(adjacencyMatrix, numNodes, sc, 1, 0.85).printAll()
+      //HARD CODED LMAO
+      val numNodes = 875713
+      println(numNodes)
+      val startTime = System.nanoTime()
+      val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, numNodes, sc, 10, 0.85)
+      val timeTaken = (System.nanoTime() - startTime) / 1e9d
+      powerIterationResult.getValues.saveAsTextFile("output")
+      println(timeTaken)
       adjacencyMatrix.unpersist()
-      */
+
+      //Built in Graph Method
+
+      val webGraph = GraphLoader.edgeListFile(sc, fileName)
+      val graphStartTime = System.nanoTime()
+      //val rankedGraph = webGraph.pageRank(0.001).vertices
+      val graphTimeTaken = (System.nanoTime() - graphStartTime) / 1e9d
+      println(graphTimeTaken)
+      //rankedGraph.saveAsTextFile("output")
+
       //vectorTest(sc)
-      matrixMethodTest(sc)
+      //https://stackoverflow.com/questions/37730808/how-i-know-the-runtime-of-a-code-in-scala
+      //matrixMethodTest(sc)
     }
 
   }
@@ -68,7 +86,10 @@ object BasicPageRank {
     //val danglers = MatrixMethod.getDanglers(origExampleAdj, numNodes, sc)
     //val uniform = new DistrVector(sc.parallelize(Seq((0, 0.25), (1, 0.25), (2, 0.25), (3, 0.25))))
     //MatrixMethod.iterate(uniform, hyperlinks, danglers, 0.85, 4, sc).printAll()
-    MatrixMethod.powerIterations(origExampleAdj, numNodes, sc, 40, 0.85).printAll()
+    val startTime = System.nanoTime()
+    val powerIterationResult = MatrixMethod.powerIterations(origExampleAdj, numNodes, sc, 10, 0.85)
+    val timeTaken = (System.nanoTime() - startTime) / 1e9d
+    println(timeTaken)
 
     /*
     val joinTester1 = sc.parallelize(Seq((0, 1), (1, 2)))
