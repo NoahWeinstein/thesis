@@ -1,7 +1,7 @@
 
 import org.apache.spark.graphx.GraphLoader
 import org.apache.spark.rdd.RDD
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
 
 object BasicPageRank {
   def main(args: Array[String]): Unit = {
@@ -24,15 +24,19 @@ object BasicPageRank {
       val fileName = "web-Google.txt"
       val file = sc.textFile(fileName)
 
+      vectorTest(sc)
+
       //Matrix Method First
-      val adjacencyMatrix = MatrixMethod.fileToMatrix(file).persist()
+      val adjacencyMatrix = MatrixMethod.fileToMatrix(file).partitionBy(new HashPartitioner(8)).persist()
+      println(adjacencyMatrix.getNumPartitions)
+
       //HARD CODED LMAO
       val numNodes = 875713
       println(numNodes)
       val startTime = System.nanoTime()
-      val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, numNodes, sc, 10, 0.85)
+      val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, numNodes, sc, 20, 0.85)
       val timeTaken = (System.nanoTime() - startTime) / 1e9d
-      powerIterationResult.getValues.saveAsTextFile("output")
+      //powerIterationResult.getValues.saveAsTextFile("output")
       println(timeTaken)
       adjacencyMatrix.unpersist()
 
@@ -40,12 +44,17 @@ object BasicPageRank {
 
       val webGraph = GraphLoader.edgeListFile(sc, fileName)
       val graphStartTime = System.nanoTime()
-      //val rankedGraph = webGraph.pageRank(0.001).vertices
+      val rankedGraph = webGraph.pageRank(0.001).vertices
       val graphTimeTaken = (System.nanoTime() - graphStartTime) / 1e9d
       println(graphTimeTaken)
+      val graphRanks = new DistrVector(rankedGraph.map {
+        case (id, value) => (id.toInt, value)
+      })
+      println("SOME ERRORS")
+      println(powerIterationResult.infNormDistance(graphRanks))
+      println(powerIterationResult.euclidDistance(graphRanks))
       //rankedGraph.saveAsTextFile("output")
 
-      //vectorTest(sc)
       //https://stackoverflow.com/questions/37730808/how-i-know-the-runtime-of-a-code-in-scala
       //matrixMethodTest(sc)
     }
@@ -59,6 +68,7 @@ object BasicPageRank {
     //multiplied.getValues.foreach(x => println(x))
 
     val biggerVector = new DistrVector(sc.parallelize(Seq((0, 5.0), (1, 3.0), (2, 2.0))))
+    val otherVector = new DistrVector(sc.parallelize(Seq((0, 4.0), (1, 1.0), (2, 4.0))))
     val fatMatrix = sc.parallelize(Seq(
       (0, (0, 2.0)), (0, (1, 3.0)),
       (1, (0, 1.0)), (1, (1, 2.0)),
@@ -66,6 +76,7 @@ object BasicPageRank {
     ))
     val bigMultiplied = biggerVector.matrixMult(fatMatrix)
     bigMultiplied.getValues.foreach(x => println(x))
+    println(biggerVector.euclidDistance(otherVector))
   }
 
   def matrixMethodTest(sc: SparkContext): Unit = {
@@ -82,14 +93,20 @@ object BasicPageRank {
       (2, (0, 1.0)),
       (3, (0, 1.0)), (3, (2, 1.0))
     ))
+    val withDanglers = sc.parallelize(Seq(
+      (0, (1, 1.0)), (0, (2, 1.0)), (0, (3, 1.0)),
+      (1, (2, 1.0)),
+      (3, (0, 1.0)), (3, (2, 1.0))
+    ))
     //val hyperlinks = MatrixMethod.toHyperLinkMat(origExampleAdj)
     //val danglers = MatrixMethod.getDanglers(origExampleAdj, numNodes, sc)
     //val uniform = new DistrVector(sc.parallelize(Seq((0, 0.25), (1, 0.25), (2, 0.25), (3, 0.25))))
     //MatrixMethod.iterate(uniform, hyperlinks, danglers, 0.85, 4, sc).printAll()
     val startTime = System.nanoTime()
-    val powerIterationResult = MatrixMethod.powerIterations(origExampleAdj, numNodes, sc, 10, 0.85)
+    val powerIterationResult = MatrixMethod.powerIterations(withDanglers, numNodes, sc, 2, 0.85)
     val timeTaken = (System.nanoTime() - startTime) / 1e9d
     println(timeTaken)
+    powerIterationResult.printAll()
 
     /*
     val joinTester1 = sc.parallelize(Seq((0, 1), (1, 2)))

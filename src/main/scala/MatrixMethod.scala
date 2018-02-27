@@ -1,6 +1,8 @@
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 
+
+// https://stanford.edu/~rezab/classes/cme323/S16/notes/Lecture16/Partitioning_PageRank.pdf
 object MatrixMethod {
 
   def fileToMatrix(file: RDD[String]): RDD[(Int, (Int, Double))] = {
@@ -43,15 +45,17 @@ object MatrixMethod {
 
   def powerIterations(adjacencyMatrix: RDD[(Int, (Int, Double))], numNodes: Int, sc: SparkContext,
                      numIterations: Int, alpha: Double): DistrVector = {
-    val danglers = getDanglers(adjacencyMatrix, numNodes, sc)
+    val danglers = getDanglers(adjacencyMatrix, numNodes, sc).persist()
     val hyperlinks = toHyperLinkMat(adjacencyMatrix).persist()
-    var pivector = new DistrVector(sc.parallelize(0 until numNodes).map(x => (x, 1.0 / numNodes)))
+    var pivector = new DistrVector(sc.parallelize(0 until numNodes).map(x => (x, 1.0 /* / numNodes*/)))
     for (i <- 1 to numIterations) {
-      pivector.getValues.persist()
+      //pivector.getValues.persist()
       val nextPivector = iterate(pivector, hyperlinks, danglers, alpha, numNodes, sc)
-      pivector.getValues.unpersist()
+      //pivector.getValues.unpersist()
+      println(pivector.infNormDistance(nextPivector))
       pivector = nextPivector
     }
+    danglers.unpersist()
     hyperlinks.unpersist()
     pivector
   }
