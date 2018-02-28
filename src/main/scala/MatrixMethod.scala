@@ -35,7 +35,7 @@ object MatrixMethod {
               numNodes: Int, sc: SparkContext): DistrVector = {
     val hyperLinkPart = pivector.scale(alpha).matrixMult(hyperlinks)
     val uniform = sc.parallelize(0 until numNodes)
-    // SHOULD BE AGGREGATE, BUT THEN WE NEED TO FUNCTIONS I AM LAZY AHHH
+    // SHOULD BE AGGREGATE, BUT THEN WE NEED TWO FUNCTIONS I AM LAZY AHHH
     val pivectorTimesDanglers = pivector.getValues.join(danglers).fold((0, (0,0))) {
       case ((_, (value1, _)), (_, (value2, _))) => (0,(value1 + value2, 0))
     }._2._1
@@ -47,7 +47,7 @@ object MatrixMethod {
                      numIterations: Int, alpha: Double): DistrVector = {
     val danglers = getDanglers(adjacencyMatrix, numNodes, sc).persist()
     val hyperlinks = toHyperLinkMat(adjacencyMatrix).persist()
-    var pivector = new DistrVector(sc.parallelize(0 until numNodes).map(x => (x, 1.0 /* / numNodes*/)))
+    var pivector = new DistrVector(sc.parallelize(0 until numNodes).map(x => (x, 1.0 / numNodes)))
     for (i <- 1 to numIterations) {
       //pivector.getValues.persist()
       val nextPivector = iterate(pivector, hyperlinks, danglers, alpha, numNodes, sc)

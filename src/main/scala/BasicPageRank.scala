@@ -1,5 +1,5 @@
 
-import org.apache.spark.graphx.GraphLoader
+import org.apache.spark.graphx.{Edge, Graph, GraphLoader, VertexId}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
 
@@ -25,6 +25,8 @@ object BasicPageRank {
       val file = sc.textFile(fileName)
 
       vectorTest(sc)
+      matrixMethodTest(sc)
+      graphMethodTest(sc)
 
       //Matrix Method First
       val adjacencyMatrix = MatrixMethod.fileToMatrix(file).partitionBy(new HashPartitioner(8)).persist()
@@ -34,7 +36,7 @@ object BasicPageRank {
       val numNodes = 875713
       println(numNodes)
       val startTime = System.nanoTime()
-      val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, numNodes, sc, 20, 0.85)
+      val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, numNodes, sc, 30, 0.85)
       val timeTaken = (System.nanoTime() - startTime) / 1e9d
       //powerIterationResult.getValues.saveAsTextFile("output")
       println(timeTaken)
@@ -44,7 +46,7 @@ object BasicPageRank {
 
       val webGraph = GraphLoader.edgeListFile(sc, fileName)
       val graphStartTime = System.nanoTime()
-      val rankedGraph = webGraph.pageRank(0.001).vertices
+      val rankedGraph = webGraph.staticPageRank(30).vertices  //(0.001).vertices
       val graphTimeTaken = (System.nanoTime() - graphStartTime) / 1e9d
       println(graphTimeTaken)
       val graphRanks = new DistrVector(rankedGraph.map {
@@ -103,16 +105,34 @@ object BasicPageRank {
     //val uniform = new DistrVector(sc.parallelize(Seq((0, 0.25), (1, 0.25), (2, 0.25), (3, 0.25))))
     //MatrixMethod.iterate(uniform, hyperlinks, danglers, 0.85, 4, sc).printAll()
     val startTime = System.nanoTime()
-    val powerIterationResult = MatrixMethod.powerIterations(withDanglers, numNodes, sc, 2, 0.85)
+    val powerIterationResult = MatrixMethod.powerIterations(withDanglers, numNodes, sc, 50, 0.85)
     val timeTaken = (System.nanoTime() - startTime) / 1e9d
     println(timeTaken)
+    println("PRINTING POWER METHOD WITH ONE DANGLER")
     powerIterationResult.printAll()
+    println("DONE WITH POWER METHOD")
 
     /*
     val joinTester1 = sc.parallelize(Seq((0, 1), (1, 2)))
     val joinTester2 = sc.parallelize(Seq((1, 3)))
     joinTester1.join(joinTester2).foreach(x => println(x))
     */
+  }
+
+  def graphMethodTest(sc: SparkContext): Unit = {
+    val vertices: RDD[(VertexId, Int)] = sc.parallelize(Array((0L, 1), (1L, 1), (2L, 1), (3L, 1)))
+    val edges = sc.parallelize(Array(
+      Edge(0L, 1L, 1), Edge(0L, 2L, 1), Edge(0L, 3L, 1),
+      Edge(1L, 2L, 1),
+      Edge(3L, 0L, 1), Edge(3L, 2L, 1)
+    ))
+    val danglerGraph = Graph(vertices, edges)
+    val startTime = System.nanoTime()
+    val pageRanks = danglerGraph.staticPageRank(50).vertices
+    val timeTaken = (System.nanoTime() - startTime) / 1e9d
+    println("PRINTING GRAPH TEST WITH DANGLER")
+    pageRanks.foreach(println)
+    println("DONE WITH GRAPH TEST")
   }
 
 }
