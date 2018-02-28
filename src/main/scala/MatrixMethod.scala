@@ -31,10 +31,10 @@ object MatrixMethod {
   }
 
   // Idea: pik+1 = alpha * pik * hyperlinks + (alpha *  pik * danglers + 1 - alpha) * uniform / n
+  // You can pass in the uniform vector to save time
   def iterate(pivector: DistrVector, hyperlinks: RDD[(Int, (Int,  Double))], danglers: RDD[(Int, Int)], alpha: Double,
-              numNodes: Int, sc: SparkContext): DistrVector = {
+              numNodes: Int, sc: SparkContext, uniform: RDD[Int]): DistrVector = {
     val hyperLinkPart = pivector.scale(alpha).matrixMult(hyperlinks)
-    val uniform = sc.parallelize(0 until numNodes)
     // SHOULD BE AGGREGATE, BUT THEN WE NEED TWO FUNCTIONS I AM LAZY AHHH
     val pivectorTimesDanglers = pivector.getValues.join(danglers).fold((0, (0,0))) {
       case ((_, (value1, _)), (_, (value2, _))) => (0,(value1 + value2, 0))
@@ -47,16 +47,18 @@ object MatrixMethod {
                      numIterations: Int, alpha: Double): DistrVector = {
     val danglers = getDanglers(adjacencyMatrix, numNodes, sc).persist()
     val hyperlinks = toHyperLinkMat(adjacencyMatrix).persist()
+    val uniform = sc.parallelize(0 until numNodes).persist()
     var pivector = new DistrVector(sc.parallelize(0 until numNodes).map(x => (x, 1.0 / numNodes)))
     for (i <- 1 to numIterations) {
       //pivector.getValues.persist()
-      val nextPivector = iterate(pivector, hyperlinks, danglers, alpha, numNodes, sc)
+      val nextPivector = iterate(pivector, hyperlinks, danglers, alpha, numNodes, sc, uniform)
       //pivector.getValues.unpersist()
-      println(pivector.infNormDistance(nextPivector))
+      //println(pivector.infNormDistance(nextPivector))
       pivector = nextPivector
     }
     danglers.unpersist()
     hyperlinks.unpersist()
-    pivector
+    uniform.unpersist()
+    pivector.scale(numNodes)
   }
 }
