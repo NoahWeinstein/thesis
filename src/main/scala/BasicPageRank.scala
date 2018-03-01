@@ -24,7 +24,7 @@ object BasicPageRank {
       val fileName = "web-Google.txt"
       val file = sc.textFile(fileName)
 
-      vectorTest(sc)
+      //vectorTest(sc)
       matrixMethodTest(sc)
       graphMethodTest(sc)
 
@@ -36,9 +36,10 @@ object BasicPageRank {
       val numNodes = 875713
       println(numNodes)
       val startTime = System.nanoTime()
-      val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, numNodes, sc, 30, 0.85)
+      val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, numNodes, sc, 10, 0.85)
+      println(powerIterationResult.getValues.count())
       val timeTaken = (System.nanoTime() - startTime) / 1e9d
-      //powerIterationResult.getValues.saveAsTextFile("output")
+      powerIterationResult.getValues.saveAsTextFile("powerOutput")
       println(timeTaken)
       adjacencyMatrix.unpersist()
 
@@ -46,7 +47,7 @@ object BasicPageRank {
 
       val webGraph = GraphLoader.edgeListFile(sc, fileName)
       val graphStartTime = System.nanoTime()
-      val rankedGraph = webGraph.staticPageRank(30).vertices  //(0.001).vertices
+      val rankedGraph = webGraph.staticPageRank(50).vertices  //(0.001).vertices
       val graphTimeTaken = (System.nanoTime() - graphStartTime) / 1e9d
       println(graphTimeTaken)
       val graphRanks = new DistrVector(rankedGraph.map {
@@ -55,12 +56,12 @@ object BasicPageRank {
       println("SOME ERRORS")
       println(powerIterationResult.infNormDistance(graphRanks))
       println(powerIterationResult.euclidDistance(graphRanks))
-      //rankedGraph.saveAsTextFile("output")
+      //rankedGraph.saveAsTextFile("graphOutput")
 
       //https://stackoverflow.com/questions/37730808/how-i-know-the-runtime-of-a-code-in-scala
       //matrixMethodTest(sc)
     }
-
+//458 2733
   }
 
   def vectorTest(sc: SparkContext): Unit = {

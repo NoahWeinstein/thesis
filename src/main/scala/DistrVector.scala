@@ -47,6 +47,10 @@ class DistrVector(values: RDD[(Int, Double)]) {
     })
   }
 
+  def cache(): DistrVector = {
+    new DistrVector(values.cache())
+  }
+
   override def toString: String = "DistrVector(" + values.toString() + ")"
 
   //For debugging only, bad performance in parallel or something maybe

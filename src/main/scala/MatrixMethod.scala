@@ -1,4 +1,5 @@
 import org.apache.spark.SparkContext
+import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix
 import org.apache.spark.rdd.RDD
 
 
@@ -34,13 +35,22 @@ object MatrixMethod {
   // You can pass in the uniform vector to save time
   def iterate(pivector: DistrVector, hyperlinks: RDD[(Int, (Int,  Double))], danglers: RDD[(Int, Int)], alpha: Double,
               numNodes: Int, sc: SparkContext, uniform: RDD[Int]): DistrVector = {
-    val hyperLinkPart = pivector.scale(alpha).matrixMult(hyperlinks)
+    val beginHyperlinkTime = System.nanoTime()
+    val hyperLinkPart = pivector.scale(alpha).matrixMult(hyperlinks).addRDD(uniform.map(x => (x, (1.0 - alpha) / numNodes)))
+    val hyperLinkTimeTaken = (System.nanoTime() - beginHyperlinkTime) / 1e9d
+    debug("Time taken to calculate the hyperlink part " + hyperLinkTimeTaken)
+    /*
     // SHOULD BE AGGREGATE, BUT THEN WE NEED TWO FUNCTIONS I AM LAZY AHHH
+    val beginDanglerTime = System.nanoTime()
     val pivectorTimesDanglers = pivector.getValues.join(danglers).fold((0, (0,0))) {
       case ((_, (value1, _)), (_, (value2, _))) => (0,(value1 + value2, 0))
     }._2._1
+    val endDanglerTime = (System.nanoTime() - beginDanglerTime) / 1e9d
+    debug("Time taken to calculate the dangling Node part " + endDanglerTime)
     val danglerPart = uniform.map( index => (index, (alpha * pivectorTimesDanglers + 1 - alpha) / numNodes))
-    hyperLinkPart.addRDD(danglerPart)
+    val result = hyperLinkPart.addRDD(danglerPart)
+    */
+    hyperLinkPart
   }
 
   def powerIterations(adjacencyMatrix: RDD[(Int, (Int, Double))], numNodes: Int, sc: SparkContext,
@@ -48,17 +58,45 @@ object MatrixMethod {
     val danglers = getDanglers(adjacencyMatrix, numNodes, sc).persist()
     val hyperlinks = toHyperLinkMat(adjacencyMatrix).persist()
     val uniform = sc.parallelize(0 until numNodes).persist()
-    var pivector = new DistrVector(sc.parallelize(0 until numNodes).map(x => (x, 1.0 / numNodes)))
+    var pivector = new DistrVector(uniform.map(x => (x, 1.0 / numNodes)))
     for (i <- 1 to numIterations) {
-      //pivector.getValues.persist()
-      val nextPivector = iterate(pivector, hyperlinks, danglers, alpha, numNodes, sc, uniform)
-      //pivector.getValues.unpersist()
+      debug("Starting iteration " + i)
+      val nextPivector = iterate(pivector, hyperlinks, danglers, alpha, numNodes, sc, uniform).cache()
       //println(pivector.infNormDistance(nextPivector))
       pivector = nextPivector
     }
-    danglers.unpersist()
-    hyperlinks.unpersist()
-    uniform.unpersist()
     pivector.scale(numNodes)
   }
+
+  def debug(str: String): Unit = {
+    val DEBUG = true
+    if (DEBUG) {
+      println(str)
+    }
+  }
+  // I think this will be a cleaner way of doing things
+  // Adapted from https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/SparkPageRank.scala
+  // Add in dealing with dangling nodes
+  /*
+  def powerUntilConvergence(adjacencyList: RDD[(Long, Iterable[Long])], numNodes: Int,
+                            sc: SparkContext, tolerance: Double, alpha: Double = 0.15): RDD[(Long, Double)] = {
+    val hyperlinks = adjacencyList.mapValues(outLinks => {
+      val size = outLinks.size //cache the size
+      outLinks.map(id => (id, 1.0 / size))
+    })
+
+    //Create danglers
+    val possibleNodes = sc.parallelize(0L until numNodes)
+    val notDanglers = adjacencyList.map {
+      case (node, _) => node
+    }
+    possibleNodes.subtract(notDanglers)
+
+    val ranks = possibleNodes.map(n => (n, 0, 1, false)) //(index, old pageRank, new pageRank, whether this has terminated)
+    val finishedCount = sc.longAccumulator
+    while (finishedCount.value != numNodes) {
+      val newTraffic = ranks.
+    }
+  }
+  */
 }
