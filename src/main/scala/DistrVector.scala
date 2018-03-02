@@ -25,7 +25,7 @@ class DistrVector(values: RDD[(Int, Double)]) {
   }
 
   def euclidDistance(other: DistrVector): Double = {
-    // Find differemces squared, then reduce
+    // Find differences squared, then reduce
     Math.sqrt(values.join(other.getValues).map {
       case (_, (x1, x2)) => Math.pow(x1 - x2, 2)
     } reduce {
@@ -42,8 +42,8 @@ class DistrVector(values: RDD[(Int, Double)]) {
   }
 
   def addRDD(rdd: RDD[(Int, Double)]): DistrVector = {
-    new DistrVector(values.leftOuterJoin(rdd).mapValues {
-      case (vectorVal, otherVal) => vectorVal + otherVal.getOrElse(0.0)
+    new DistrVector(values.fullOuterJoin(rdd).mapValues {
+      case (vectorVal, otherVal) => vectorVal.getOrElse(0.0) + otherVal.getOrElse(0.0)
     })
   }
 

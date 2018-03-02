@@ -12,12 +12,18 @@ object MatrixMethod {
       (edge(0).toInt, (edge(1).toInt, 1.0))
     }
   }
-  def getDanglers(adjacencyMatrix: RDD[(Int, (Int, Double))], numNodes: Int, sc: SparkContext): RDD[(Int, Int)] = {
-    val possibleNodes = sc.parallelize(0 until numNodes)
+  def getDanglers(adjacencyMatrix: RDD[(Int, (Int, Double))], numNodes: Int, sc: SparkContext,
+                  nodes: RDD[Int]): RDD[(Int, Int)] = {
     val notDanglers = adjacencyMatrix.map {
       case (node, _) => node
     }
-    possibleNodes.subtract(notDanglers).map(x => (x, 1))
+    nodes.subtract(notDanglers).map(x => (x, 1))
+  }
+
+  def getNodes(adjacencyMatrix: RDD[(Int, (Int, Double))]): RDD[Int] = {
+    adjacencyMatrix.flatMap({
+      case (row, (col, _)) => Iterable(row, col)
+    }).distinct()
   }
 
   // Takes an adjacency matrix and turns it into a hyperlink matrix.
@@ -34,34 +40,31 @@ object MatrixMethod {
   // Idea: pik+1 = alpha * pik * hyperlinks + (alpha *  pik * danglers + 1 - alpha) * uniform / n
   // You can pass in the uniform vector to save time
   def iterate(pivector: DistrVector, hyperlinks: RDD[(Int, (Int,  Double))], danglers: RDD[(Int, Int)], alpha: Double,
-              numNodes: Int, sc: SparkContext, uniform: RDD[Int]): DistrVector = {
-    val beginHyperlinkTime = System.nanoTime()
-    val hyperLinkPart = pivector.scale(alpha).matrixMult(hyperlinks).addRDD(uniform.map(x => (x, (1.0 - alpha) / numNodes)))
-    val hyperLinkTimeTaken = (System.nanoTime() - beginHyperlinkTime) / 1e9d
-    debug("Time taken to calculate the hyperlink part " + hyperLinkTimeTaken)
-    /*
+              numNodes: Int, sc: SparkContext, nodes: RDD[Int]): DistrVector = {
+    debug("Number of pageRanks at start of iteration: " + pivector.getValues.count())
+    val hyperLinkPart = pivector.scale(alpha).matrixMult(hyperlinks)//.addRDD(uniform.map(x => (x, (1.0 - alpha) / numNodes)))
     // SHOULD BE AGGREGATE, BUT THEN WE NEED TWO FUNCTIONS I AM LAZY AHHH
-    val beginDanglerTime = System.nanoTime()
+    debug("Number of ranks in hyperlink part: " + hyperLinkPart.getValues.count())
+
     val pivectorTimesDanglers = pivector.getValues.join(danglers).fold((0, (0,0))) {
       case ((_, (value1, _)), (_, (value2, _))) => (0,(value1 + value2, 0))
     }._2._1
-    val endDanglerTime = (System.nanoTime() - beginDanglerTime) / 1e9d
-    debug("Time taken to calculate the dangling Node part " + endDanglerTime)
-    val danglerPart = uniform.map( index => (index, (alpha * pivectorTimesDanglers + 1 - alpha) / numNodes))
+    val danglerPart = nodes.map( index => (index, (alpha * pivectorTimesDanglers + 1 - alpha) / numNodes))
+    debug("Number of pageRanks in danglerPart: " + danglerPart.count())
     val result = hyperLinkPart.addRDD(danglerPart)
-    */
-    hyperLinkPart
+    debug("Number of pageRanks at end of iteration: " + result.getValues.count())
+    result
   }
 
   def powerIterations(adjacencyMatrix: RDD[(Int, (Int, Double))], numNodes: Int, sc: SparkContext,
                      numIterations: Int, alpha: Double): DistrVector = {
-    val danglers = getDanglers(adjacencyMatrix, numNodes, sc).persist()
+    val nodes = getNodes(adjacencyMatrix).cache()
+    val danglers = getDanglers(adjacencyMatrix, numNodes, sc, nodes).persist()
     val hyperlinks = toHyperLinkMat(adjacencyMatrix).persist()
-    val uniform = sc.parallelize(0 until numNodes).persist()
-    var pivector = new DistrVector(uniform.map(x => (x, 1.0 / numNodes)))
+    var pivector = new DistrVector(nodes.map(x => (x, 1.0 / numNodes)))
     for (i <- 1 to numIterations) {
       debug("Starting iteration " + i)
-      val nextPivector = iterate(pivector, hyperlinks, danglers, alpha, numNodes, sc, uniform).cache()
+      val nextPivector = iterate(pivector, hyperlinks, danglers, alpha, numNodes, sc, nodes).cache()
       //println(pivector.infNormDistance(nextPivector))
       pivector = nextPivector
     }

@@ -134,6 +134,17 @@ object BasicPageRank {
     println("PRINTING GRAPH TEST WITH DANGLER")
     pageRanks.foreach(println)
     println("DONE WITH GRAPH TEST")
+
+    doMCTest(danglerGraph, 80)
+  }
+
+  def doMCTest(webGraph: Graph[Int, Int], numIters: Int): Unit = {
+    val mcStartTime = System.nanoTime()
+    val mcPageRanks = MonteCarloMethod.doMNWalks(webGraph, numIters)
+    val mcTimeTaken = (System.nanoTime() - mcStartTime) / 1e9d
+    println("PRINTING MC TEST WITH DANGLER")
+    mcPageRanks.foreach(println)
+    println("DONE WITH MC TEST")
   }
 
 }
