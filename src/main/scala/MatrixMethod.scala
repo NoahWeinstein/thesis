@@ -12,7 +12,7 @@ object MatrixMethod {
       (edge(0).toInt, (edge(1).toInt, 1.0))
     }
   }
-  def getDanglers(adjacencyMatrix: RDD[(Int, (Int, Double))], numNodes: Int, sc: SparkContext,
+  def getDanglers(adjacencyMatrix: RDD[(Int, (Int, Double))], numNodes: Long, sc: SparkContext,
                   nodes: RDD[Int]): RDD[(Int, Int)] = {
     val notDanglers = adjacencyMatrix.map {
       case (node, _) => node
@@ -40,25 +40,25 @@ object MatrixMethod {
   // Idea: pik+1 = alpha * pik * hyperlinks + (alpha *  pik * danglers + 1 - alpha) * uniform / n
   // You can pass in the uniform vector to save time
   def iterate(pivector: DistrVector, hyperlinks: RDD[(Int, (Int,  Double))], danglers: RDD[(Int, Int)], alpha: Double,
-              numNodes: Int, sc: SparkContext, nodes: RDD[Int]): DistrVector = {
-    debug("Number of pageRanks at start of iteration: " + pivector.getValues.count())
+              numNodes: Long, sc: SparkContext, nodes: RDD[Int]): DistrVector = {
+    //debug("Number of pageRanks at start of iteration: " + pivector.getValues.count())
     val hyperLinkPart = pivector.scale(alpha).matrixMult(hyperlinks)//.addRDD(uniform.map(x => (x, (1.0 - alpha) / numNodes)))
     // SHOULD BE AGGREGATE, BUT THEN WE NEED TWO FUNCTIONS I AM LAZY AHHH
-    debug("Number of ranks in hyperlink part: " + hyperLinkPart.getValues.count())
+    //debug("Number of ranks in hyperlink part: " + hyperLinkPart.getValues.count())
 
     val pivectorTimesDanglers = pivector.getValues.join(danglers).fold((0, (0,0))) {
       case ((_, (value1, _)), (_, (value2, _))) => (0,(value1 + value2, 0))
     }._2._1
     val danglerPart = nodes.map( index => (index, (alpha * pivectorTimesDanglers + 1 - alpha) / numNodes))
-    debug("Number of pageRanks in danglerPart: " + danglerPart.count())
+    //debug("Number of pageRanks in danglerPart: " + danglerPart.count())
     val result = hyperLinkPart.addRDD(danglerPart)
-    debug("Number of pageRanks at end of iteration: " + result.getValues.count())
+    //debug("Number of pageRanks at end of iteration: " + result.getValues.count())
     result
   }
 
-  def powerIterations(adjacencyMatrix: RDD[(Int, (Int, Double))], numNodes: Int, sc: SparkContext,
-                     numIterations: Int, alpha: Double): DistrVector = {
+  def powerIterations(adjacencyMatrix: RDD[(Int, (Int, Double))], sc: SparkContext, numIterations: Int, alpha: Double): DistrVector = {
     val nodes = getNodes(adjacencyMatrix).cache()
+    val numNodes = nodes.count()
     val danglers = getDanglers(adjacencyMatrix, numNodes, sc, nodes).persist()
     val hyperlinks = toHyperLinkMat(adjacencyMatrix).persist()
     var pivector = new DistrVector(nodes.map(x => (x, 1.0 / numNodes)))

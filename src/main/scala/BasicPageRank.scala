@@ -32,11 +32,8 @@ object BasicPageRank {
       val adjacencyMatrix = MatrixMethod.fileToMatrix(file).partitionBy(new HashPartitioner(8)).persist()
       println(adjacencyMatrix.getNumPartitions)
 
-      //HARD CODED LMAO
-      val numNodes = 875713
-      println(numNodes)
       val startTime = System.nanoTime()
-      val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, numNodes, sc, 10, 0.85)
+      val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, sc, 10, 0.85)
       println(powerIterationResult.getValues.count())
       val timeTaken = (System.nanoTime() - startTime) / 1e9d
       powerIterationResult.getValues.saveAsTextFile("powerOutput")
@@ -89,7 +86,6 @@ object BasicPageRank {
       (2, (0, 0.0)), (2, (1, 0.0))
     ))
     // MatrixMethod.getDanglers(sparseMatrix, 6, sc).foreach(x => println(x))
-    val numNodes = 4
     val origExampleAdj = sc.parallelize(Seq(
       (0, (1, 1.0)), (0, (2, 1.0)), (0, (3, 1.0)),
       (1, (2, 1.0)),
@@ -106,7 +102,7 @@ object BasicPageRank {
     //val uniform = new DistrVector(sc.parallelize(Seq((0, 0.25), (1, 0.25), (2, 0.25), (3, 0.25))))
     //MatrixMethod.iterate(uniform, hyperlinks, danglers, 0.85, 4, sc).printAll()
     val startTime = System.nanoTime()
-    val powerIterationResult = MatrixMethod.powerIterations(withDanglers, numNodes, sc, 50, 0.85)
+    val powerIterationResult = MatrixMethod.powerIterations(withDanglers, sc, 50, 0.85)
     val timeTaken = (System.nanoTime() - startTime) / 1e9d
     println(timeTaken)
     println("PRINTING POWER METHOD WITH ONE DANGLER")
