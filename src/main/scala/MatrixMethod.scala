@@ -58,20 +58,19 @@ object MatrixMethod {
   def powerIterations(adjacencyMatrix: RDD[(Int, (Int, Double))], sc: SparkContext, numIterations: Int, alpha: Double): DistrVector = {
     val nodes = getNodes(adjacencyMatrix).cache()
     val numNodes = nodes.count()
-    val danglers = getDanglers(adjacencyMatrix, numNodes, sc, nodes).persist()
-    val hyperlinks = toHyperLinkMat(adjacencyMatrix).persist()
+    val danglers = getDanglers(adjacencyMatrix, numNodes, sc, nodes).cache()
+    val hyperlinks = toHyperLinkMat(adjacencyMatrix).cache()
     var pivector = new DistrVector(nodes.map(x => (x, 1.0 / numNodes)))
     for (i <- 1 to numIterations) {
-      debug("Starting iteration " + i)
+      //debug("Starting iteration " + i)
       val nextPivector = iterate(pivector, hyperlinks, danglers, alpha, numNodes, sc, nodes).cache()
-      //println(pivector.infNormDistance(nextPivector))
       pivector = nextPivector
     }
     pivector.scale(numNodes)
   }
 
   def debug(str: String): Unit = {
-    val DEBUG = true
+    val DEBUG = false
     if (DEBUG) {
       println(str)
     }

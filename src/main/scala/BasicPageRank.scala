@@ -2,7 +2,7 @@
 import org.apache.spark.graphx.{Edge, Graph, GraphLoader, VertexId}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
-import java.io._
+import java.io.{BufferedWriter, File, FileWriter}
 
 object BasicPageRank {
   def main(args: Array[String]): Unit = {
@@ -17,42 +17,43 @@ object BasicPageRank {
     val experiment = "4machines"
     val matrixOutput = if (isAws) s"s3://thesisgraphs/$experiment/matrixOutput/" else "matrixOutput"
     val graphOutput = if (isAws) s"s3://thesisgraphs/$experiment/graphOutput/" else "graphOutput"
-    val errorOutput = if (isAws) s"s3://thesisgraphs/$experiment/errors/errors.txt" else "errors/errors.txt"
+    val errorOutput = if (isAws) s"s3://thesisgraphs/$experiment/errors.txt" else "errors.txt"
+    val timesOutput = if (isAws) s"s3://thesisgraphs/$experiment/times.txt" else "times.txt"
+
+    val timesWriter = new BufferedWriter(new FileWriter(new File(timesOutput)))
+    val errorWriter = new BufferedWriter(new FileWriter(new File(errorOutput)))
     //vectorTest(sc)
     //matrixMethodTest(sc)
     //graphMethodTest(sc)
 
     //Matrix Method First
     val adjacencyMatrix = MatrixMethod.fileToMatrix(file).partitionBy(new HashPartitioner(8)).persist()
-    println(adjacencyMatrix.getNumPartitions)
 
     val startTime = System.nanoTime()
     val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, sc, 10, 0.85)
-    println(powerIterationResult.getValues.count())
     val timeTaken = (System.nanoTime() - startTime) / 1e9d
-    powerIterationResult.getValues.saveAsTextFile("powerOutput")
-    println(timeTaken)
-    adjacencyMatrix.unpersist()
+    powerIterationResult.getValues.coalesce(1).saveAsTextFile(matrixOutput)
+    timesWriter.write(s"Power Iteration Time: $timeTaken \n")
+    //adjacencyMatrix.unpersist()
 
     //Built in Graph Method
 
     val webGraph = GraphLoader.edgeListFile(sc, fileName)
     val graphStartTime = System.nanoTime()
-    val rankedGraph = webGraph.pageRank(0.001).vertices  //(0.001).vertices
+    val rankedGraph = webGraph.staticPageRank(10).vertices  //(0.001).vertices
     val graphTimeTaken = (System.nanoTime() - graphStartTime) / 1e9d
-    println(graphTimeTaken)
+    timesWriter.write(s"Built-In Time: $graphTimeTaken \n")
     val graphRanks = new DistrVector(rankedGraph.map {
       case (id, value) => (id.toInt, value)
     })
-    println("SOME ERRORS")
-    println(powerIterationResult.infNormDistance(graphRanks))
-    println(powerIterationResult.euclidDistance(graphRanks))
-    //rankedGraph.saveAsTextFile("graphOutput")
+    errorWriter.write(s"Infinity norm between built-in and power: ${powerIterationResult.infNormDistance(graphRanks)}\n")
+    errorWriter.write(s"Euclidean norm between built-in and power: ${powerIterationResult.euclidDistance(graphRanks)}\n")
+    rankedGraph.coalesce(1).saveAsTextFile(graphOutput)
 
     //https://stackoverflow.com/questions/37730808/how-i-know-the-runtime-of-a-code-in-scala
     //matrixMethodTest(sc)
-
-//458 2733
+    timesWriter.close()
+    errorWriter.close()
   }
 
   def vectorTest(sc: SparkContext): Unit = {
