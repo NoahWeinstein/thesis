@@ -38,11 +38,10 @@ object MatrixMethod {
   }
 
   // Idea: pik+1 = alpha * pik * hyperlinks + (alpha *  pik * danglers + 1 - alpha) * uniform / n
-  // You can pass in the uniform vector to save time
   def iterate(pivector: DistrVector, hyperlinks: RDD[(Int, (Int,  Double))], danglers: RDD[(Int, Int)], alpha: Double,
               numNodes: Long, sc: SparkContext, nodes: RDD[Int]): DistrVector = {
     //debug("Number of pageRanks at start of iteration: " + pivector.getValues.count())
-    val hyperLinkPart = pivector.scale(alpha).matrixMult(hyperlinks)//.addRDD(uniform.map(x => (x, (1.0 - alpha) / numNodes)))
+    val hyperLinkPart = pivector.scale(alpha).matrixMult(hyperlinks)//.addRDD(nodes.map(x => (x, (1.0 - alpha) / numNodes)))
     // SHOULD BE AGGREGATE, BUT THEN WE NEED TWO FUNCTIONS I AM LAZY AHHH
     //debug("Number of ranks in hyperlink part: " + hyperLinkPart.getValues.count())
 

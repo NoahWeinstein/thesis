@@ -2,62 +2,56 @@
 import org.apache.spark.graphx.{Edge, Graph, GraphLoader, VertexId}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
+import java.io._
 
 object BasicPageRank {
   def main(args: Array[String]): Unit = {
     val isAws = false
-    val conf = new SparkConf().setAppName("BasicPageRank").setMaster("local[2]")
+    val conf = if (isAws) new SparkConf().setAppName("BasicPageRank")
+                else new SparkConf().setAppName("BasicPageRank").setMaster("local[2]")
     val sc = new SparkContext(conf)
     sc.setLogLevel("WARN")
-    if (isAws) {
+    val fileName = if (isAws) "s3://thesisgraphs/web-Google.txt" else "web-Google.txt"
 
-      val fileName = "s3://thesisgraphs/small-graph.txt"
+    val file = sc.textFile(fileName)
+    val experiment = "4machines"
+    val matrixOutput = if (isAws) s"s3://thesisgraphs/$experiment/matrixOutput/" else "matrixOutput"
+    val graphOutput = if (isAws) s"s3://thesisgraphs/$experiment/graphOutput/" else "graphOutput"
+    val errorOutput = if (isAws) s"s3://thesisgraphs/$experiment/errors/errors.txt" else "errors/errors.txt"
+    //vectorTest(sc)
+    //matrixMethodTest(sc)
+    //graphMethodTest(sc)
 
-      val graph = GraphLoader.edgeListFile(sc, fileName)
+    //Matrix Method First
+    val adjacencyMatrix = MatrixMethod.fileToMatrix(file).partitionBy(new HashPartitioner(8)).persist()
+    println(adjacencyMatrix.getNumPartitions)
 
-      //https://spark.apache.org/docs/latest/graphx-programming-guide.html#pagerank
-      val ranks = graph.pageRank(0.0001).vertices
+    val startTime = System.nanoTime()
+    val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, sc, 10, 0.85)
+    println(powerIterationResult.getValues.count())
+    val timeTaken = (System.nanoTime() - startTime) / 1e9d
+    powerIterationResult.getValues.saveAsTextFile("powerOutput")
+    println(timeTaken)
+    adjacencyMatrix.unpersist()
 
-      ranks.coalesce(1).saveAsTextFile("s3://thesisgraphs/output")
-    } else {
+    //Built in Graph Method
 
-      val fileName = "web-Google.txt"
-      val file = sc.textFile(fileName)
+    val webGraph = GraphLoader.edgeListFile(sc, fileName)
+    val graphStartTime = System.nanoTime()
+    val rankedGraph = webGraph.pageRank(0.001).vertices  //(0.001).vertices
+    val graphTimeTaken = (System.nanoTime() - graphStartTime) / 1e9d
+    println(graphTimeTaken)
+    val graphRanks = new DistrVector(rankedGraph.map {
+      case (id, value) => (id.toInt, value)
+    })
+    println("SOME ERRORS")
+    println(powerIterationResult.infNormDistance(graphRanks))
+    println(powerIterationResult.euclidDistance(graphRanks))
+    //rankedGraph.saveAsTextFile("graphOutput")
 
-      //vectorTest(sc)
-      matrixMethodTest(sc)
-      graphMethodTest(sc)
+    //https://stackoverflow.com/questions/37730808/how-i-know-the-runtime-of-a-code-in-scala
+    //matrixMethodTest(sc)
 
-      //Matrix Method First
-      val adjacencyMatrix = MatrixMethod.fileToMatrix(file).partitionBy(new HashPartitioner(8)).persist()
-      println(adjacencyMatrix.getNumPartitions)
-
-      val startTime = System.nanoTime()
-      val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, sc, 10, 0.85)
-      println(powerIterationResult.getValues.count())
-      val timeTaken = (System.nanoTime() - startTime) / 1e9d
-      powerIterationResult.getValues.saveAsTextFile("powerOutput")
-      println(timeTaken)
-      adjacencyMatrix.unpersist()
-
-      //Built in Graph Method
-
-      val webGraph = GraphLoader.edgeListFile(sc, fileName)
-      val graphStartTime = System.nanoTime()
-      val rankedGraph = webGraph.staticPageRank(50).vertices  //(0.001).vertices
-      val graphTimeTaken = (System.nanoTime() - graphStartTime) / 1e9d
-      println(graphTimeTaken)
-      val graphRanks = new DistrVector(rankedGraph.map {
-        case (id, value) => (id.toInt, value)
-      })
-      println("SOME ERRORS")
-      println(powerIterationResult.infNormDistance(graphRanks))
-      println(powerIterationResult.euclidDistance(graphRanks))
-      //rankedGraph.saveAsTextFile("graphOutput")
-
-      //https://stackoverflow.com/questions/37730808/how-i-know-the-runtime-of-a-code-in-scala
-      //matrixMethodTest(sc)
-    }
 //458 2733
   }
 
@@ -97,6 +91,11 @@ object BasicPageRank {
       (1, (2, 1.0)),
       (3, (0, 1.0)), (3, (2, 1.0))
     ))
+    val twoDanglers = sc.parallelize(Seq(
+      (0, (1, 1.0)), (0, (2, 1.0)), (0, (3, 1.0)),
+      (1, (2, 1.0)), (1, (4, 1.0)),
+      (3, (0, 1.0)), (3, (2, 1.0))
+    ))
     //val hyperlinks = MatrixMethod.toHyperLinkMat(origExampleAdj)
     //val danglers = MatrixMethod.getDanglers(origExampleAdj, numNodes, sc)
     //val uniform = new DistrVector(sc.parallelize(Seq((0, 0.25), (1, 0.25), (2, 0.25), (3, 0.25))))
@@ -104,10 +103,14 @@ object BasicPageRank {
     val startTime = System.nanoTime()
     val powerIterationResult = MatrixMethod.powerIterations(withDanglers, sc, 50, 0.85)
     val timeTaken = (System.nanoTime() - startTime) / 1e9d
+    val twoDanglerResult = MatrixMethod.powerIterations(twoDanglers, sc, 50, 0.85)
     println(timeTaken)
     println("PRINTING POWER METHOD WITH ONE DANGLER")
     powerIterationResult.printAll()
     println("DONE WITH POWER METHOD")
+    println("PRINTING POWER METHOD WITH TWO DANGLERS")
+    twoDanglerResult.printAll()
+    println("DONE WITH TWO DANGLER POWER METHOD")
 
     /*
     val joinTester1 = sc.parallelize(Seq((0, 1), (1, 2)))
@@ -130,7 +133,17 @@ object BasicPageRank {
     println("PRINTING GRAPH TEST WITH DANGLER")
     pageRanks.foreach(println)
     println("DONE WITH GRAPH TEST")
-
+    val twoDanglerVers: RDD[(VertexId, Int)] = sc.parallelize(Array((0L, 1), (1L, 1), (2L, 1), (3L, 1), (4L, 1)))
+    val twoDanglerEdge = sc.parallelize(Array(
+      Edge(0L, 1L, 1), Edge(0L, 2L, 1), Edge(0L, 3L, 1),
+      Edge(1L, 2L, 1), Edge(1L, 4L, 1),
+      Edge(3L, 0L, 1), Edge(3L, 2L, 1)
+    ))
+    val twoDanglerGraph = Graph(twoDanglerVers, twoDanglerEdge)
+    val twoDanglerRanks = twoDanglerGraph.staticPageRank(50).vertices
+    println("PRINTING GRAPH TEST WITH TWO DANGLERS")
+    twoDanglerRanks.foreach(println)
+    println("DONE WITH SECOND GRAPH TEST")
     doMCTest(danglerGraph, 80)
   }
 

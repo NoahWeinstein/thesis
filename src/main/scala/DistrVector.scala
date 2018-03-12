@@ -26,16 +26,16 @@ class DistrVector(values: RDD[(Int, Double)]) {
 
   def euclidDistance(other: DistrVector): Double = {
     // Find differences squared, then reduce
-    Math.sqrt(values.join(other.getValues).map {
-      case (_, (x1, x2)) => Math.pow(x1 - x2, 2)
+    Math.sqrt(values.fullOuterJoin(other.getValues).map {
+      case (_, (x1, x2)) => Math.pow(x1.getOrElse(0.0) - x2.getOrElse(0.0), 2)
     } reduce {
       (a, b) => a + b
     })
   }
 
   def infNormDistance(other: DistrVector): Double = {
-    values.join(other.getValues).map {
-      case (_, (x1, x2)) => Math.abs(x1 - x2)
+    values.fullOuterJoin(other.getValues).map {
+      case (_, (x1, x2)) => Math.abs(x1.getOrElse(0.0) - x2.getOrElse(0.0))
     } reduce {
       (a, b) => Math.max(a, b)
     }
