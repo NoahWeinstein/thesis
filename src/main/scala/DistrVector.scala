@@ -41,6 +41,16 @@ class DistrVector(values: RDD[(Int, Double)]) {
     }
   }
 
+  def infNorm(): Double = {
+    values.map(_._2).reduce(Math.max)
+  }
+
+  def euclidNorm(): Double = {
+    Math.sqrt(values.map {
+      case (_, x) => Math.pow(x, 2)
+    } reduce(_ + _))
+  }
+
   def addRDD(rdd: RDD[(Int, Double)]): DistrVector = {
     new DistrVector(values.fullOuterJoin(rdd).mapValues {
       case (vectorVal, otherVal) => vectorVal.getOrElse(0.0) + otherVal.getOrElse(0.0)

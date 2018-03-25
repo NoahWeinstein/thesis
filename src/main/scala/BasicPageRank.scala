@@ -6,7 +6,7 @@ import java.io.{BufferedWriter, File, FileWriter}
 
 object BasicPageRank {
   def main(args: Array[String]): Unit = {
-    val isAws = true
+    val isAws = false
     val conf = if (isAws) new SparkConf().setAppName("BasicPageRank")
                 else new SparkConf().setAppName("BasicPageRank").setMaster("local[2]")
     val sc = new SparkContext(conf)
@@ -14,11 +14,13 @@ object BasicPageRank {
     val fileName = if (isAws) "s3://thesisgraphs/web-Google.txt" else "web-Google.txt"
 
     val file = sc.textFile(fileName)
-    val experiment = "4machines"
-    val matrixOutput = if (isAws) s"s3://thesisgraphs/$experiment/matrixOutput" else "matrixOutput"
-    val graphOutput = if (isAws) s"s3://thesisgraphs/$experiment/graphOutput" else "graphOutput"
-    val errorOutput = if (isAws) s"s3://thesisgraphs/$experiment/errors" else "errors"
-    val timesOutput = if (isAws) s"s3://thesisgraphs/$experiment/times" else "times"
+    val experiment = "2machines8parts2"
+    val matrixOutput = if (isAws) s"s3://thesisgraphs/$experiment/matrixOutput" else "matrixOutput50"
+    val graphOutput = if (isAws) s"s3://thesisgraphs/$experiment/graphOutput" else "graphOutput50"
+    val errorOutput = if (isAws) s"s3://thesisgraphs/$experiment/errors" else "errors10"
+    val timesOutput = if (isAws) s"s3://thesisgraphs/$experiment/times" else "times10"
+
+    val numIters = 10
 
     //val timesWriter = new BufferedWriter(new FileWriter(new File(timesOutput)))
     //val errorWriter = new BufferedWriter(new FileWriter(new File(errorOutput)))
@@ -30,23 +32,30 @@ object BasicPageRank {
     val adjacencyMatrix = MatrixMethod.fileToMatrix(file).partitionBy(new HashPartitioner(8)).persist()
 
     val startTime = System.nanoTime()
-    val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, sc, 10, 0.85)
+    val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, sc, numIters, 0.85)
     val timeTaken = (System.nanoTime() - startTime) / 1e9d
-    powerIterationResult.getValues.coalesce(1).saveAsTextFile(matrixOutput)
+    //powerIterationResult.getValues.coalesce(1).saveAsTextFile(matrixOutput)
     //adjacencyMatrix.unpersist()
 
     //Built in Graph Method
 
     val webGraph = GraphLoader.edgeListFile(sc, fileName)
     val graphStartTime = System.nanoTime()
-    val rankedGraph = webGraph.staticPageRank(10).vertices  //(0.001).vertices
+    val rankedGraph = webGraph.staticPageRank(numIters).vertices  //(0.001).vertices
     val graphTimeTaken = (System.nanoTime() - graphStartTime) / 1e9d
     val graphRanks = new DistrVector(rankedGraph.map {
       case (id, value) => (id.toInt, value)
     })
+
+    //Monte Carlo Method
+
     val infError = powerIterationResult.infNormDistance(graphRanks)
     val euclideanError = powerIterationResult.euclidDistance(graphRanks)
-    rankedGraph.coalesce(1).saveAsTextFile(graphOutput)
+    val infRelativeToMatrix = infError / powerIterationResult.infNorm()
+    val eucildRelativeToMatrix = euclideanError / powerIterationResult.euclidNorm()
+    val infRelativeToGraph = infError / graphRanks.infNorm()
+    val euclidRelativeToGraph = euclideanError / graphRanks.euclidNorm()
+    //rankedGraph.coalesce(1).saveAsTextFile(graphOutput)
 
     val times = sc.parallelize(Seq(
       ("Power Iteration", timeTaken),
@@ -54,8 +63,12 @@ object BasicPageRank {
     ), 1)
     times.saveAsTextFile(timesOutput)
     val errors = sc.parallelize(Seq(
-      ("Infinity Norm", infError),
-      ("Euclidean Norm", euclideanError)
+      ("Infinity Error", infError),
+      ("Euclidean Error", euclideanError),
+      ("Infinity Error Relative to Matrix", infRelativeToMatrix),
+      ("Euclidean Error Relative to Matrix", eucildRelativeToMatrix),
+      ("Infinity Error Relative to Graph", infRelativeToGraph),
+      ("Euclidean Error Relative to Graph", euclidRelativeToGraph)
     ), 1)
     errors.saveAsTextFile(errorOutput)
     //https://stackoverflow.com/questions/37730808/how-i-know-the-runtime-of-a-code-in-scala
