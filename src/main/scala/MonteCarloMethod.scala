@@ -3,8 +3,9 @@ import org.apache.spark.rdd.RDD
 
 import scala.util.Random
 
-//Idea, map each vertex in a graph to a random edge... need a list of out nodes for each vertex, is that possible?
-
+/*
+ * Code for running the Monte Carlo Methods
+ */
 object MonteCarloMethod {
   val r = new Random()
   def doMNWalks (webGraph: Graph[Int, Int], numIters: Int, alpha: Double = 0.85): RDD[(Long, Double)] = {
@@ -33,6 +34,7 @@ object MonteCarloMethod {
         walksGraph = walksGraph.mapVertices({ //Reset current visitors to 1
           case (id, (_, totalVisits, neighbs)) => (1, totalVisits, neighbs)
         })
+        walksGraph.checkpoint()
       }
     }
     val combinedVisits = walksGraph.vertices.map({

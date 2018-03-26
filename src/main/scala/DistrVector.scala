@@ -1,6 +1,10 @@
 import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix
 import org.apache.spark.rdd.RDD
 
+/*
+ * Vector object that contains useful methods for use on an RDD such as
+ * Matrix multiplication and error calculation.
+ */
 class DistrVector(values: RDD[(Int, Double)]) {
 
   def getValues: RDD[(Int, Double)] = values
@@ -63,7 +67,7 @@ class DistrVector(values: RDD[(Int, Double)]) {
 
   override def toString: String = "DistrVector(" + values.toString() + ")"
 
-  //For debugging only, bad performance in parallel or something maybe
+  //For debugging only, bad performance in parallel maybe
   def printAll(): Unit = {
     values.foreach(x => println(x))
   }

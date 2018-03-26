@@ -2,6 +2,9 @@ import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix
 import org.apache.spark.rdd.RDD
 
+/*
+ * Power Iteration Method
+ */
 
 // https://stanford.edu/~rezab/classes/cme323/S16/notes/Lecture16/Partitioning_PageRank.pdf
 object MatrixMethod {
@@ -41,8 +44,7 @@ object MatrixMethod {
   def iterate(pivector: DistrVector, hyperlinks: RDD[(Int, (Int,  Double))], danglers: RDD[(Int, Int)], alpha: Double,
               numNodes: Long, sc: SparkContext, nodes: RDD[Int]): DistrVector = {
     //debug("Number of pageRanks at start of iteration: " + pivector.getValues.count())
-    val hyperLinkPart = pivector.scale(alpha).matrixMult(hyperlinks)//.addRDD(nodes.map(x => (x, (1.0 - alpha) / numNodes)))
-    // SHOULD BE AGGREGATE, BUT THEN WE NEED TWO FUNCTIONS I AM LAZY AHHH
+    val hyperLinkPart = pivector.scale(alpha).matrixMult(hyperlinks)
     //debug("Number of ranks in hyperlink part: " + hyperLinkPart.getValues.count())
 
     val pivectorTimesDanglers = pivector.getValues.join(danglers).fold((0, (0,0))) {
@@ -75,7 +77,7 @@ object MatrixMethod {
       println(str)
     }
   }
-  // I think this will be a cleaner way of doing things
+  // Start of possibly cleaner way of doing things
   // Adapted from https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/SparkPageRank.scala
   // Add in dealing with dangling nodes
   /*
