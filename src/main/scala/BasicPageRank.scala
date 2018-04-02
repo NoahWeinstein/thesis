@@ -20,11 +20,11 @@ object BasicPageRank {
     val fileName = if (isAws) "s3://thesisgraphs/web-Google.txt" else "web-Google.txt"
 
     val file = sc.textFile(fileName)
-    val experiment = "2machines8parts2"
+    val experiment = "4machines10partsFIX"
     val matrixOutput = if (isAws) s"s3://thesisgraphs/$experiment/matrixOutput" else "matrixOutput50"
     val graphOutput = if (isAws) s"s3://thesisgraphs/$experiment/graphOutput" else "graphOutput50"
-    val errorOutput = if (isAws) s"s3://thesisgraphs/$experiment/errors" else "errors20mc"
-    val timesOutput = if (isAws) s"s3://thesisgraphs/$experiment/times" else "times10"
+    val errorOutput = if (isAws) s"s3://thesisgraphs/$experiment/errors" else "errors10partfix"
+    val timesOutput = if (isAws) s"s3://thesisgraphs/$experiment/times" else "times10partfix"
 
     val numIters = 10
 
@@ -37,12 +37,12 @@ object BasicPageRank {
     val startTime = System.nanoTime()
     val powerIterationResult = MatrixMethod.powerIterations(adjacencyMatrix, sc, numIters, 0.85)
     val timeTaken = (System.nanoTime() - startTime) / 1e9d
-    powerIterationResult.getValues.coalesce(1).saveAsTextFile(matrixOutput)
+    //powerIterationResult.getValues.coalesce(1).saveAsTextFile(matrixOutput)
     adjacencyMatrix.unpersist()
 
     //Built in Graph Method
 
-    val webGraph = GraphLoader.edgeListFile(sc, fileName)
+    val webGraph = GraphLoader.edgeListFile(sc, fileName, numEdgePartitions = 8)
     val graphStartTime = System.nanoTime()
     val rankedGraph = webGraph.staticPageRank(numIters).vertices  //(0.001).vertices
     val graphTimeTaken = (System.nanoTime() - graphStartTime) / 1e9d
@@ -50,39 +50,40 @@ object BasicPageRank {
       case (id, value) => (id.toInt, value)
     })
 
+    //rankedGraph.coalesce(1).saveAsTextFile(graphOutput)
+
     //Monte Carlo Method
-    val mcPageRanks = new DistrVector(MonteCarloMethod.doMNWalks(webGraph, numIters).map({
-      case (key, value) => (key.toInt, value)
-    }))
+//    val mcPageRanks = new DistrVector(MonteCarloMethod.doMNWalks(webGraph, numIters).map({
+//      case (key, value) => (key.toInt, value)
+//    }))
 
     val infError = powerIterationResult.infNormDistance(graphRanks)
     val euclideanError = powerIterationResult.euclidDistance(graphRanks)
-    val mcInfError = powerIterationResult.infNormDistance(mcPageRanks)
-    val mcEuclidError = powerIterationResult.euclidDistance(mcPageRanks)
+//    val mcInfError = powerIterationResult.infNormDistance(mcPageRanks)
+//    val mcEuclidError = powerIterationResult.euclidDistance(mcPageRanks)
     val infRelativeToMatrix = infError / powerIterationResult.infNorm()
     val eucildRelativeToMatrix = euclideanError / powerIterationResult.euclidNorm()
     val infRelativeToGraph = infError / graphRanks.infNorm()
     val euclidRelativeToGraph = euclideanError / graphRanks.euclidNorm()
-    val mcInfRelativeToMatrix = mcInfError / powerIterationResult.infNorm()
-    val mcEucildRelativeToMatrix = mcEuclidError / powerIterationResult.euclidNorm()
-    rankedGraph.coalesce(1).saveAsTextFile(graphOutput)
+//    val mcInfRelativeToMatrix = mcInfError / powerIterationResult.infNorm()
+//    val mcEucildRelativeToMatrix = mcEuclidError / powerIterationResult.euclidNorm()
 
     val times = sc.parallelize(Seq(
       ("Power Iteration", timeTaken),
       ("Built-in", graphTimeTaken)
     ), 1)
-    //times.saveAsTextFile(timesOutput)
+    times.saveAsTextFile(timesOutput)
     val errors = sc.parallelize(Seq(
       ("Infinity Error", infError),
       ("Euclidean Error", euclideanError),
       ("Infinity Error Relative to Matrix", infRelativeToMatrix),
       ("Euclidean Error Relative to Matrix", eucildRelativeToMatrix),
       ("Infinity Error Relative to Graph", infRelativeToGraph),
-      ("Euclidean Error Relative to Graph", euclidRelativeToGraph),
-      ("MC Infinity Error", mcInfError),
-      ("MC Euclidean Error", mcEuclidError),
-      ("MC Infinity Error Relative to Matrix", mcInfRelativeToMatrix),
-      ("MC Euclidean Error Relative to Matrix", mcEucildRelativeToMatrix)
+      ("Euclidean Error Relative to Graph", euclidRelativeToGraph)
+//      ("MC Infinity Error", mcInfError),
+//      ("MC Euclidean Error", mcEuclidError),
+//      ("MC Infinity Error Relative to Matrix", mcInfRelativeToMatrix),
+//      ("MC Euclidean Error Relative to Matrix", mcEucildRelativeToMatrix)
     ), 1)
     errors.saveAsTextFile(errorOutput)
     //https://stackoverflow.com/questions/37730808/how-i-know-the-runtime-of-a-code-in-scala
