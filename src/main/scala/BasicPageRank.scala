@@ -20,7 +20,9 @@ object BasicPageRank {
     val fileName = if (isAws) "s3://thesisgraphs/web-Google.txt" else "web-Google.txt"
 
     val file = sc.textFile(fileName)
-    val experiment = "4machines10partsFIX"
+    val numMachines = if (args.nonEmpty) args(0) else "unknown"
+
+    val experiment = s"${numMachines}machines8partsFIX"
     val matrixOutput = if (isAws) s"s3://thesisgraphs/$experiment/matrixOutput" else "matrixOutput50"
     val graphOutput = if (isAws) s"s3://thesisgraphs/$experiment/graphOutput" else "graphOutput50"
     val errorOutput = if (isAws) s"s3://thesisgraphs/$experiment/errors" else "errors10partfix"
